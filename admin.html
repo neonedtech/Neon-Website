@@ -66,86 +66,126 @@ onAuthStateChanged(auth, user=>{
 // LOGOUT
 window.logout = function(){ signOut(auth); }
 
+// Helper: create a table row from cell values; pass {label, action} for a button cell
+function createRow(cells){
+  const tr = document.createElement("tr");
+  cells.forEach(cell => {
+    const td = document.createElement("td");
+    if(cell !== null && typeof cell === "object" && cell.label){
+      const btn = document.createElement("button");
+      btn.textContent = cell.label;
+      btn.addEventListener("click", cell.action);
+      td.appendChild(btn);
+    } else {
+      td.textContent = (cell !== null && cell !== undefined && cell !== "") ? cell : "-";
+    }
+    tr.appendChild(td);
+  });
+  return tr;
+}
+
 // ADD PRODUCT
 window.addProduct = async function(){
-  const title = document.getElementById("title").value;
-  const price = document.getElementById("price").value;
-  const video = document.getElementById("video").value;
-  const desc = document.getElementById("desc").value;
+  const title = document.getElementById("title").value.trim();
+  const price = document.getElementById("price").value.trim();
+  const video = document.getElementById("video").value.trim();
+  const desc = document.getElementById("desc").value.trim();
   if(!title || !price) return alert("Title and Price required");
-  await addDoc(collection(db,"products"),{title, price, video, desc});
-  loadProducts();
+  if(title.length > 200) return alert("Title must be 200 characters or fewer");
+  const priceNum = parseFloat(price);
+  if(isNaN(priceNum) || priceNum < 0) return alert("Price must be a valid non-negative number");
+  try{
+    await addDoc(collection(db,"products"),{title, price: priceNum, video, desc});
+    loadProducts();
+  }catch(err){
+    alert("Failed to add product: "+err.message);
+  }
 }
 
 // LOAD PRODUCTS
 async function loadProducts(){
-  const snapshot = await getDocs(collection(db,"products"));
-  const table = document.getElementById("productTable");
-  table.innerHTML="<tr><th>Title</th><th>Price</th><th>Action</th></tr>";
-  snapshot.forEach(docSnap=>{
-    const data = docSnap.data();
-    table.innerHTML += `
-      <tr>
-        <td>${data.title}</td>
-        <td>${data.price}</td>
-        <td><button onclick="deleteProduct('${docSnap.id}')">Delete</button></td>
-      </tr>`;
-  });
+  try{
+    const snapshot = await getDocs(collection(db,"products"));
+    const table = document.getElementById("productTable");
+    table.innerHTML="<tr><th>Title</th><th>Price</th><th>Action</th></tr>";
+    snapshot.forEach(docSnap=>{
+      const data = docSnap.data();
+      table.appendChild(createRow([
+        data.title,
+        data.price,
+        {label:"Delete", action:()=>deleteProduct(docSnap.id)}
+      ]));
+    });
+  }catch(err){
+    alert("Failed to load products: "+err.message);
+  }
 }
 
 // DELETE PRODUCT
 window.deleteProduct = async function(id){
-  await deleteDoc(doc(db,"products",id));
-  loadProducts();
+  try{
+    await deleteDoc(doc(db,"products",id));
+    loadProducts();
+  }catch(err){
+    alert("Failed to delete product: "+err.message);
+  }
 }
 
 // VERIFY ORDER
 window.verifyOrder = async function(id){
-  await updateDoc(doc(db,"orders",id),{status:"Verified"});
+  try{
+    await updateDoc(doc(db,"orders",id),{status:"Verified"});
+  }catch(err){
+    alert("Failed to verify order: "+err.message);
+  }
 }
 
 // 🔹 Real-time Orders
 function loadOrders(){
   const table = document.getElementById("orderTable");
-  table.innerHTML = "<tr><th>Order ID</th><th>Product</th><th>Method</th><th>Email</th><th>Status</th><th>Timestamp</th><th>Action</th></tr>";
+  const header = "<tr><th>Order ID</th><th>Product</th><th>Method</th><th>Email</th><th>Status</th><th>Timestamp</th><th>Action</th></tr>";
+  table.innerHTML = header;
   
   const ordersCol = collection(db,"orders");
   onSnapshot(ordersCol, snapshot => {
-    // reset table
-    table.innerHTML = "<tr><th>Order ID</th><th>Product</th><th>Method</th><th>Email</th><th>Status</th><th>Timestamp</th><th>Action</th></tr>";
+    table.innerHTML = header;
     snapshot.forEach(docSnap=>{
       const data = docSnap.data();
       const ts = data.timestamp ? new Date(data.timestamp).toLocaleString() : '-';
-      table.innerHTML += `
-        <tr>
-          <td>${data.id || docSnap.id}</td>
-          <td>${data.product}</td>
-          <td>${data.method}</td>
-          <td>${data.email || '-'}</td>
-          <td>${data.status}</td>
-          <td>${ts}</td>
-          <td><button onclick="verifyOrder('${docSnap.id}')">Verify</button></td>
-        </tr>`;
+      table.appendChild(createRow([
+        data.id || docSnap.id,
+        data.product,
+        data.method,
+        data.email,
+        data.status,
+        ts,
+        {label:"Verify", action:()=>verifyOrder(docSnap.id)}
+      ]));
     });
+  }, err=>{
+    alert("Failed to load orders: "+err.message);
   });
 }
 
 // LOAD SUBSCRIBERS
 async function loadSubscribers(){
-  const snapshot = await getDocs(collection(db,"subscribers"));
-  const table = document.getElementById("subscriberTable");
-  if(!table) return;
-  table.innerHTML="<tr><th>Email</th><th>Product</th><th>Timestamp</th></tr>";
-  snapshot.forEach(docSnap=>{
-    const data = docSnap.data();
-    const ts = data.timestamp ? new Date(data.timestamp).toLocaleString() : '-';
-    table.innerHTML += `
-      <tr>
-        <td>${data.email || '-'}</td>
-        <td>${data.product || '-'}</td>
-        <td>${ts}</td>
-      </tr>`;
-  });
+  try{
+    const snapshot = await getDocs(collection(db,"subscribers"));
+    const table = document.getElementById("subscriberTable");
+    if(!table) return;
+    table.innerHTML="<tr><th>Email</th><th>Product</th><th>Timestamp</th></tr>";
+    snapshot.forEach(docSnap=>{
+      const data = docSnap.data();
+      const ts = data.timestamp ? new Date(data.timestamp).toLocaleString() : '-';
+      table.appendChild(createRow([
+        data.email,
+        data.product,
+        ts
+      ]));
+    });
+  }catch(err){
+    alert("Failed to load subscribers: "+err.message);
+  }
 }
 
 </script>
